@@ -14,7 +14,16 @@ A compact, neon-cyberpunk desktop music player for **local MP3 / WAV files**, wi
 
 Requirements: **Node.js 20+** (or 22+), npm.
 
-**Easiest path — no terminal:** double-click **`Start NeonAmp.bat`**. It checks for
+**Prebuilt Windows binaries** are attached to the
+[latest release](https://github.com/Marusame00/NeonAmp/releases/latest):
+
+- `NeonAmp-1.0.0-Setup.exe` — installer, adds a Start Menu entry and desktop shortcut
+- `NeonAmp-1.0.0-Portable.exe` — single file, no installation
+
+Neither is code-signed, so Windows SmartScreen will warn on first run
+(**More info → Run anyway**).
+
+**From source — no terminal:** double-click **`Start NeonAmp.bat`**. It checks for
 Node.js, installs dependencies if `node_modules` is missing, and launches the app.
 After the first successful run you can double-click **`NeonAmp.vbs`** for a silent
 launch with no console window.
@@ -155,14 +164,18 @@ The overlay has also been checked in OBS itself (Browser Source, Windows): the
 in-app live preview matches what OBS renders.
 
 ## 8. Packaging (optional)
-`electron-builder` is intentionally **not** installed by default — it pulls a large
-dependency tree. Install it only when you want an installer:
+
+`electron-builder` is intentionally **not** a dependency — it pulls a large tree
+(249 packages, ~370 MB of `node_modules`). Install it only when you want to build:
 
 ```bash
 npm install --no-save electron-builder
-npm run dist        # NSIS installer + portable exe in dist/
+npm run dist        # dist/NeonAmp-<version>-Setup.exe + -Portable.exe
 npm run dist:dir    # unpacked folder, fastest
 ```
+
+Artifact names are set per target in `package.json` (`nsis.artifactName` and
+`portable.artifactName`) so the installer and the portable build do not collide.
 
 ## Architecture
 
