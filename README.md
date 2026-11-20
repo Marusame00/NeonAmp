@@ -10,6 +10,18 @@ A compact, neon-cyberpunk desktop music player for **local MP3 / WAV files**, wi
 
 ---
 
+## Screenshots
+
+![NeonAmp player window](docs/screenshot-player.png)
+
+*The player: album-grouped playlist on the left, Now Playing and the editable Up Next queue on the right, and the OBS Browser Source URL at the bottom.*
+
+![Overlay settings with live preview](docs/screenshot-overlay-settings.png)
+
+*Overlay settings: layout, sizing, colours and visibility toggles on the left, and the exact page OBS loads on the right.*
+
+---
+
 ## 1. Install
 
 Requirements: **Node.js 20+** (or 22+), npm.
@@ -190,6 +202,7 @@ src/metadata.js         music-metadata tag/artwork extraction + artwork cache
 src/server.js           localhost HTTP: SSE stream, /api/state, /audio (Range), /artwork
 src/renderer/           desktop UI (index.html, styles.css, app.js)
 src/overlay/            the OBS page (overlay.html, overlay.css, overlay.js, fallback.svg)
+docs/                   README screenshots
 ```
 
 - **Transport**: the renderer owns an `HTMLAudioElement`; audio is streamed from the
