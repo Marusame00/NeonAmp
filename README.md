@@ -8,6 +8,12 @@ A compact, neon-cyberpunk desktop music player for **local MP3 / WAV files**, wi
 - Local server bound to `127.0.0.1` only — nothing is uploaded, no account needed
 - Playlist, volume, preferences and overlay styling persist between sessions
 
+> **AI disclosure:** NeonAmp was built with heavy AI assistance. Most of the code
+> and docs were written with **Smaug Flash (Thinking)** through
+> [Abacus.AI](https://abacus.ai), working from the author's direction, testing and
+> bug reports. It is not hand-written from scratch — read the code before relying
+> on it. See [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md).
+
 ---
 
 ## Screenshots
