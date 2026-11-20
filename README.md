@@ -17,8 +17,8 @@ Requirements: **Node.js 20+** (or 22+), npm.
 **Prebuilt Windows binaries** are attached to the
 [latest release](https://github.com/Marusame00/NeonAmp/releases/latest):
 
-- `NeonAmp-1.0.0-Setup.exe` — installer, adds a Start Menu entry and desktop shortcut
-- `NeonAmp-1.0.0-Portable.exe` — single file, no installation
+- `NeonAmp-1.1.0-Setup.exe` — installer, adds a Start Menu entry and desktop shortcut
+- `NeonAmp-1.1.0-Portable.exe` — single file, no installation
 
 Neither is code-signed, so Windows SmartScreen will warn on first run
 (**More info → Run anyway**).
@@ -154,7 +154,8 @@ Everything is saved to `state.json` in the app's user-data folder
 and asserts, end to end: playlist rendering, tag + embedded-artwork extraction,
 playback reaching the server, overlay receiving the track, elapsed clock, the
 overlay card staying dark (a regression guard for the glow scale), overlay text,
-pause freezing position, seek, next-track, stop, and state persistence. It exits
+pause freezing position, seek, next-track, stop, state persistence, and the
+editable queue (add, reorder, play-next, clear). It runs 22 checks, exits
 non-zero on failure and writes screenshots to `smoke/`.
 
 Generate the test media once with ffmpeg (any 12 s MP3 with cover art plus an
