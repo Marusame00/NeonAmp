@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NeonAmp Overlay</title>
+<link rel="stylesheet" href="/overlay.css" />
+</head>
+<body class="is-stopped">
+  <div id="stage" class="stage layout-horizontal">
+    <div class="card" id="card">
+      <div class="art-wrap" id="artWrap">
+        <img id="art" class="art" alt="" />
+        <div class="art-fallback" id="artFallback" aria-hidden="true">
+          <svg viewBox="0 0 64 64" class="fallback-glyph">
+            <circle cx="32" cy="32" r="21" />
+            <circle cx="32" cy="32" r="6.5" />
+            <path d="M32 11v10M32 43v10M11 32h10M43 32h10" />
+          </svg>
+          <span class="fallback-bars"><i></i><i></i><i></i><i></i><i></i></span>
+        </div>
+        <div class="art-glow" aria-hidden="true"></div>
+      </div>
+
+      <div class="body">
+        <div class="label" id="label"><span class="dot"></span><span id="labelText">NOW PLAYING</span></div>
+        <div class="title" id="title">Nothing playing</div>
+        <div class="artist" id="artist">Add music in NeonAmp</div>
+        <div class="album" id="album"></div>
+
+        <div class="progress-block" id="progressBlock">
+          <div class="bar" id="bar">
+            <div class="bar-fill" id="barFill"></div>
+            <div class="bar-head" id="barHead"></div>
+          </div>
+          <div class="times" id="times">
+            <span id="elapsed">0:00</span>
+            <span id="duration">0:00</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/overlay.js"></script>
+</body>
+</html>

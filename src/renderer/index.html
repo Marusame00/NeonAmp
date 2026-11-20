@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: http://127.0.0.1:* http://localhost:*; media-src http://127.0.0.1:* http://localhost:*; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src http://127.0.0.1:* http://localhost:*; connect-src http://127.0.0.1:* http://localhost:*" />
+<title>NeonAmp</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app">
+
+  <header class="titlebar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M4 14v-4M8 18V6M12 15V9M16 20V4M20 13v-2" /></svg>
+      </span>
+      <span class="brand-text">NEON<b>WAVE</b></span>
+      <span class="brand-sub">local player</span>
+    </div>
+
+    <button class="server-pill" id="serverPill" title="Copy overlay URL">
+      <span class="pulse" id="serverPulse"></span>
+      <span class="server-url" id="serverUrl">starting…</span>
+      <span class="server-copy">COPY</span>
+    </button>
+
+    <div class="titlebar-actions">
+      <button class="ghost-btn" id="openSettingsTop" title="Overlay settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>
+        <span>Overlay</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="workspace">
+
+    <section class="panel playlist-panel">
+      <div class="panel-head">
+        <div class="panel-title">
+          <h2>PLAYLIST</h2>
+          <span class="count" id="trackCount">0</span>
+        </div>
+        <div class="head-actions">
+          <button class="chip-btn" id="addFiles" title="Add MP3 / WAV files">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Files
+          </button>
+          <button class="chip-btn" id="addFolder" title="Add a folder of music">
+            <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Folder
+          </button>
+          <button class="icon-btn" id="clearQueue" title="Clear playlist">
+            <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="search-row">
+        <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/></svg>
+        <input id="search" type="search" placeholder="Filter by title, artist or album" spellcheck="false" />
+      </div>
+
+      <div class="tracklist" id="tracklist" role="listbox" aria-label="Playlist"></div>
+
+      <div class="empty-state" id="emptyState">
+        <div class="empty-glyph">
+          <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="22"/><circle cx="32" cy="32" r="5"/><path d="M32 10v8M32 46v8M10 32h8M46 32h8"/></svg>
+        </div>
+        <h3>No tracks yet</h3>
+        <p>Drop MP3 or WAV files here, or use <b>Files</b> / <b>Folder</b>.</p>
+      </div>
+
+      <div class="panel-foot">
+        <span>drag rows to reorder</span>
+        <span class="dot-sep">·</span>
+        <span>double-click to play</span>
+        <span class="spacer"></span>
+        <span id="totalTime">0:00</span>
+      </div>
+    </section>
+
+    <section class="panel player-panel">
+      <div class="now-playing">
+        <div class="art-frame" id="artFrame">
+          <img id="npArt" alt="Album artwork" />
+          <div class="art-fallback" id="npFallback">
+            <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="21"/><circle cx="32" cy="32" r="6.5"/><path d="M32 11v10M32 43v10M11 32h10M43 32h10"/></svg>
+            <span class="fb-bars"><i></i><i></i><i></i><i></i><i></i></span>
+          </div>
+          <div class="art-sheen" aria-hidden="true"></div>
+        </div>
+
+        <div class="np-meta">
+          <div class="np-label"><span class="dot"></span>NOW PLAYING</div>
+          <h1 id="npTitle">Nothing playing</h1>
+          <div class="np-artist" id="npArtist">Add music to get started</div>
+          <div class="np-album" id="npAlbum"></div>
+          <div class="np-badges" id="npBadges"></div>
+        </div>
+      </div>
+
+      <div class="seek-block">
+        <input type="range" id="seek" class="range seek" min="0" max="1000" value="0" step="1" aria-label="Seek" />
+        <div class="seek-times">
+          <span id="elapsed">0:00</span>
+          <span id="duration">0:00</span>
+        </div>
+      </div>
+
+      <div class="transport">
+        <button class="t-btn" id="shuffle" title="Shuffle (S)" aria-pressed="false">
+          <svg viewBox="0 0 24 24"><path d="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7M21 16v5h-5M14 14l7 7M3 3l7 7"/></svg>
+        </button>
+        <button class="t-btn" id="prev" title="Previous (Ctrl+←)">
+          <svg viewBox="0 0 24 24"><path d="M18 5v14L8 12z"/><path d="M6 5v14"/></svg>
+        </button>
+        <button class="t-btn primary" id="play" title="Play / Pause (Space)">
+          <svg id="playIcon" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>
+          <svg id="pauseIcon" class="hidden" viewBox="0 0 24 24"><path d="M8 4h3v16H8zM13 4h3v16h-3z"/></svg>
+        </button>
+        <button class="t-btn" id="stop" title="Stop (Esc)">
+          <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+        </button>
+        <button class="t-btn" id="next" title="Next (Ctrl+→)">
+          <svg viewBox="0 0 24 24"><path d="M6 5v14l10-7z"/><path d="M18 5v14"/></svg>
+        </button>
+        <button class="t-btn" id="repeat" title="Repeat (R)" aria-pressed="false">
+          <svg viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          <span class="repeat-one" id="repeatOne">1</span>
+        </button>
+      </div>
+
+      <div class="volume-row">
+        <button class="t-btn small" id="mute" title="Mute (M)">
+          <svg id="volIcon" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 8.5a5 5 0 0 1 0 7"/><path d="M19.5 6a8.5 8.5 0 0 1 0 12"/></svg>
+          <svg id="muteIcon" class="hidden" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l4 6M21 9l-4 6"/></svg>
+        </button>
+        <input type="range" id="volume" class="range vol" min="0" max="100" value="80" step="1" aria-label="Volume" />
+        <span class="vol-label" id="volLabel">80%</span>
+      </div>
+
+      <div class="upnext" id="upnext">
+        <div class="un-head">
+          <span>UP NEXT</span>
+          <span class="un-count" id="unCount"></span>
+        </div>
+        <div class="un-list" id="unList"></div>
+      </div>
+
+      <div class="overlay-card">
+        <div class="oc-top">
+          <span class="oc-title"><span class="oc-dot"></span>OBS BROWSER SOURCE</span>
+          <span class="oc-clients" id="ocClients">0 connected</span>
+        </div>
+        <div class="oc-url" id="overlayUrl">http://127.0.0.1:8765/</div>
+        <div class="oc-actions">
+          <button class="chip-btn accent" id="copyUrl">Copy URL</button>
+          <button class="chip-btn" id="openOverlay">Open preview</button>
+          <button class="chip-btn" id="openSettings">Customize</button>
+        </div>
+        <p class="oc-hint">OBS → Sources → <b>+</b> → Browser → paste the URL. Visual only; it never plays audio.</p>
+      </div>
+    </section>
+  </main>
+
+  <div class="toasts" id="toasts"></div>
+
+  <!-- settings -->
+  <div class="modal" id="settingsModal" aria-hidden="true">
+    <div class="modal-backdrop" data-close="1"></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <header class="modal-head">
+        <div>
+          <h2 id="settingsTitle">OVERLAY SETTINGS</h2>
+          <p>Changes apply live to OBS and the preview.</p>
+        </div>
+        <button class="icon-btn" id="closeSettings" title="Close">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+
+      <div class="modal-body">
+        <div class="settings-col">
+          <div class="field">
+            <label>Layout</label>
+            <div class="segmented" id="layoutSeg">
+              <button data-layout="horizontal">Horizontal</button>
+              <button data-layout="compact">Compact</button>
+            </div>
+          </div>
+
+          <div class="field-grid">
+            <div class="field">
+              <label>Width <output id="widthOut">470px</output></label>
+              <input type="range" class="range" id="width" min="240" max="900" step="10" />
+            </div>
+            <div class="field">
+              <label>Artwork <output id="artSizeOut">132px</output></label>
+              <input type="range" class="range" id="artSize" min="64" max="320" step="2" />
+            </div>
+            <div class="field">
+              <label>Font size <output id="fontSizeOut">17px</output></label>
+              <input type="range" class="range" id="fontSize" min="12" max="30" step="1" />
+            </div>
+            <div class="field">
+              <label>Corner radius <output id="radiusOut">18px</output></label>
+              <input type="range" class="range" id="radius" min="0" max="36" step="1" />
+            </div>
+            <div class="field">
+              <label>Glow <output id="glowOut">65%</output></label>
+              <input type="range" class="range" id="glow" min="0" max="100" step="1" />
+            </div>
+            <div class="field">
+              <label>Background opacity <output id="bgOpacityOut">72%</output></label>
+              <input type="range" class="range" id="bgOpacity" min="0" max="100" step="1" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Colors</label>
+            <div class="color-row">
+              <label class="color-chip"><input type="color" id="accent" /><span>Accent</span></label>
+              <label class="color-chip"><input type="color" id="accent2" /><span>Accent 2</span></label>
+              <label class="color-chip"><input type="color" id="textColor" /><span>Text</span></label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Show on overlay</label>
+            <div class="toggle-grid">
+              <label class="toggle"><input type="checkbox" id="showArtwork" /><span>Artwork</span></label>
+              <label class="toggle"><input type="checkbox" id="showArtist" /><span>Artist</span></label>
+              <label class="toggle"><input type="checkbox" id="showAlbum" /><span>Album</span></label>
+              <label class="toggle"><input type="checkbox" id="showTimes" /><span>Timestamps</span></label>
+              <label class="toggle"><input type="checkbox" id="showProgress" /><span>Progress bar</span></label>
+              <label class="toggle"><input type="checkbox" id="showLabel" /><span>“Now Playing”</span></label>
+              <label class="toggle"><input type="checkbox" id="transparent" /><span>Transparent bg</span></label>
+              <label class="toggle"><input type="checkbox" id="animations" /><span>Animations</span></label>
+            </div>
+          </div>
+
+          <div class="field-grid">
+            <div class="field">
+              <label>Label text</label>
+              <input type="text" id="labelText" class="text-input" maxlength="40" spellcheck="false" />
+            </div>
+            <div class="field">
+              <label>When stopped</label>
+              <select id="stopped" class="text-input">
+                <option value="placeholder">Show placeholder</option>
+                <option value="last">Keep last track</option>
+                <option value="hide">Hide overlay</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="settings-actions">
+            <button class="chip-btn" id="resetOverlay">Reset defaults</button>
+            <button class="chip-btn accent" id="copyUrl2">Copy Browser Source URL</button>
+          </div>
+        </div>
+
+        <div class="preview-col">
+          <div class="preview-head">
+            <span>LIVE PREVIEW</span>
+            <span class="preview-size" id="previewSize">470 × 180</span>
+          </div>
+          <div class="preview-stage" id="previewStage">
+            <iframe id="previewFrame" title="Overlay preview" scrolling="no"></iframe>
+          </div>
+          <p class="preview-hint">This is the exact page OBS loads. Transparent areas show the checkerboard.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

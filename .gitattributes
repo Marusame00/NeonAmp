@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+# Windows launchers must keep CRLF or cmd.exe misparses them
+*.bat text eol=crlf
+*.vbs text eol=crlf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.ico binary

@@ -1,0 +1,77 @@
+{
+  "name": "neonamp",
+  "productName": "NeonAmp",
+  "version": "1.0.0",
+  "description": "Local MP3/WAV music player with a neon cyberpunk Now Playing overlay for OBS Browser Sources.",
+  "main": "main.js",
+  "author": "Marusame00",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Marusame00/NeonAmp.git"
+  },
+  "homepage": "https://github.com/Marusame00/NeonAmp#readme",
+  "bugs": {
+    "url": "https://github.com/Marusame00/NeonAmp/issues"
+  },
+  "keywords": [
+    "obs",
+    "obs-browser-source",
+    "music-player",
+    "electron",
+    "mp3",
+    "wav",
+    "now-playing",
+    "cyberpunk"
+  ],
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "selftest": "electron . --selftest",
+    "dist": "electron-builder --win",
+    "dist:dir": "electron-builder --win --dir"
+  },
+  "dependencies": {
+    "music-metadata": "^12.7.0"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11"
+  },
+  "build": {
+    "appId": "com.neonamp.player",
+    "productName": "NeonAmp",
+    "asar": true,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "NeonAmp"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.music"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Audio"
+    }
+  }
+}
