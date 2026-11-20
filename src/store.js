@@ -28,6 +28,8 @@ const DEFAULT_OVERLAY = {
 
 const DEFAULT_STATE = {
   queue: [],
+  groups: [],
+  upNext: [],
   index: -1,
   volume: 0.8,
   muted: false,
@@ -115,9 +117,14 @@ function sanitizeState(input) {
     if (track.groupId && !groupIds.has(track.groupId)) track.groupId = null;
   }
   const index = Number.isInteger(src.index) && src.index >= 0 && src.index < queue.length ? src.index : (queue.length ? 0 : -1);
+  const knownIds = new Set(queue.map((t) => t.id));
+  const upNext = Array.isArray(src.upNext)
+    ? src.upNext.filter((id) => typeof id === 'string' && knownIds.has(id))
+    : [];
   return {
     queue,
     groups,
+    upNext,
     index,
     volume: clamp(src.volume, 0, 1, DEFAULT_STATE.volume),
     muted: Boolean(src.muted),
@@ -153,6 +160,10 @@ class Store {
     const next = { ...this.state };
     if (Array.isArray(patch.queue)) next.queue = patch.queue.map(sanitizeTrack).filter(Boolean);
     if (Array.isArray(patch.groups)) next.groups = patch.groups.map(sanitizeGroup).filter(Boolean);
+    if (Array.isArray(patch.upNext)) {
+      const known = new Set(next.queue.map((t) => t.id));
+      next.upNext = patch.upNext.filter((id) => typeof id === 'string' && known.has(id));
+    }
     if (Number.isInteger(patch.index)) next.index = patch.index;
     if ('sort' in patch && SORT_MODES.includes(patch.sort)) next.sort = patch.sort;
     if ('volume' in patch) next.volume = clamp(patch.volume, 0, 1, next.volume);

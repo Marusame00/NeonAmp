@@ -340,6 +340,51 @@ async function runSelfTest() {
     const stopped = await apiState();
     check('stop resets to stopped', stopped.playback.status === 'stopped' && stopped.playback.position === 0, stopped.playback);
 
+    // ---- explicit queue ----
+    const rowTitles = await js(`JSON.stringify(Array.from(document.querySelectorAll('#tracklist .track .t-title')).map(n => n.textContent))`).then(JSON.parse);
+    const secondTitle = rowTitles[1];
+    const firstTitle = rowTitles[0];
+    const queueTitles = `Array.from(document.querySelectorAll('#unList .un-title')).map(n => n.childNodes[0].textContent.trim())`;
+
+    await js(`(() => { document.querySelectorAll('#tracklist .row-add')[1].click(); return true; })()`);
+    await wait(400);
+    const queued = await js(`JSON.stringify({
+      rows: document.querySelectorAll('#unList .un-row').length,
+      first: (document.querySelector('#unList .un-title') || {childNodes:[{textContent:''}]}).childNodes[0].textContent.trim(),
+      count: document.getElementById('unCount').textContent
+    })`).then(JSON.parse);
+    check('add-to-queue button queues a track', queued.rows === 1 && queued.first === secondTitle, { ...queued, expected: secondTitle });
+
+    await js(`(() => { document.querySelectorAll('#tracklist .row-add')[0].click(); return true; })()`);
+    await wait(400);
+    const queued2 = await js(`JSON.stringify({
+      rows: document.querySelectorAll('#unList .un-row').length,
+      order: ${queueTitles}
+    })`).then(JSON.parse);
+    check('queue keeps insertion order', queued2.rows === 2 && queued2.order[0] === secondTitle && queued2.order[1] === firstTitle, queued2);
+
+    const reordered = await js(`(() => {
+      const rows = document.querySelectorAll('#unList .un-row');
+      const dt = new DataTransfer();
+      rows[1].dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+      const r = rows[0].getBoundingClientRect();
+      rows[0].dispatchEvent(new DragEvent('dragover', { bubbles: true, dataTransfer: dt, clientY: r.top + 2 }));
+      rows[0].dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer: dt, clientY: r.top + 2 }));
+      return JSON.stringify(${queueTitles});
+    })()`).then(JSON.parse);
+    check('queue rows reorder by drag', reordered[0] === firstTitle && reordered[1] === secondTitle, { order: reordered });
+
+    await js('document.getElementById("next").click()');
+    await wait(1200);
+    const consumed = await apiState();
+    check('next consumes the queue first', consumed.track && consumed.track.title === firstTitle, {
+      title: consumed.track && consumed.track.title,
+      expected: firstTitle
+    });
+    const afterConsume = await js('document.querySelectorAll("#unList .un-row").length');
+    check('consumed track leaves the queue', afterConsume === 1, { remaining: afterConsume });
+
+    await wait(900);
     const persisted = JSON.parse(await fsp.readFile(path.join(app.getPath('userData'), 'state.json'), 'utf8'));
     check('state persisted to disk', Array.isArray(persisted.queue) && persisted.queue.length === 2 && persisted.overlay && persisted.overlay.width === 470, {
       queue: persisted.queue.length,
@@ -348,6 +393,9 @@ async function runSelfTest() {
     check('album group persisted', Array.isArray(persisted.groups) && persisted.groups.length === 1 && persisted.groups[0].name === 'Chrome Dreams', {
       groups: persisted.groups && persisted.groups.length,
       sort: persisted.groups && persisted.groups[0] && persisted.groups[0].sort
+    });
+    check('queue persisted', Array.isArray(persisted.upNext) && persisted.upNext.length === 1, {
+      upNext: persisted.upNext && persisted.upNext.length
     });
 
     console.log(`[selftest] ${failures === 0 ? 'ALL PASS' : `${failures} FAILURE(S)`} ${JSON.stringify(results)}`);

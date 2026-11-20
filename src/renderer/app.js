@@ -30,6 +30,7 @@
   const state = {
     queue: [],
     groups: [],
+    upNext: [],
     index: -1,
     volume: 0.8,
     muted: false,
@@ -43,7 +44,7 @@
 
   let server = { url: 'http://127.0.0.1:8765/' };
   let filter = '';
-  let dragFrom = -1;
+  let dragState = null;
   let saveTimer = null;
   let lastSent = 0;
   let autoAdvanceTimer = null;
@@ -99,6 +100,7 @@
     const payload = {
       queue: state.queue,
       groups: state.groups,
+      upNext: state.upNext,
       index: state.index,
       volume: state.volume,
       muted: state.muted,
@@ -350,7 +352,7 @@
     const row = document.createElement('div');
     row.className = 'track';
     row.dataset.index = String(index);
-    row.draggable = sortMode === 'manual';
+    row.draggable = true;
     row.setAttribute('role', 'option');
     if (index === state.index) {
       row.classList.add('active');
@@ -398,28 +400,40 @@
     eq.className = 'eq';
     for (let i = 0; i < 4; i += 1) eq.appendChild(document.createElement('i'));
 
-    row.append(idx, thumb, meta, dur, eq);
+    const addBtn = document.createElement('button');
+    addBtn.className = 'row-add';
+    addBtn.type = 'button';
+    addBtn.title = 'Add to queue';
+    addBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>';
+    addBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      queueAdd(track.id);
+      toast(`Queued “${track.title}”.`);
+    });
+
+    row.append(idx, thumb, meta, addBtn, dur, eq);
     row.addEventListener('dblclick', () => playIndex(index));
     row.addEventListener('click', () => selectIndex(index, false));
 
+    row.addEventListener('dragstart', (e) => {
+      dragState = { kind: 'playlist', from: index, id: track.id };
+      row.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try {
+        e.dataTransfer.setData('text/plain', String(index));
+      } catch {
+        /* ignore */
+      }
+    });
+    row.addEventListener('dragend', () => {
+      dragState = null;
+      row.classList.remove('dragging');
+      clearDropMarks();
+    });
+
     if (sortMode === 'manual') {
-      row.addEventListener('dragstart', (e) => {
-        dragFrom = index;
-        row.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        try {
-          e.dataTransfer.setData('text/plain', String(index));
-        } catch {
-          /* ignore */
-        }
-      });
-      row.addEventListener('dragend', () => {
-        dragFrom = -1;
-        row.classList.remove('dragging');
-        clearDropMarks();
-      });
       row.addEventListener('dragover', (e) => {
-        if (dragFrom < 0) return;
+        if (!dragState || dragState.kind !== 'playlist') return;
         e.preventDefault();
         const rect = row.getBoundingClientRect();
         const after = e.clientY > rect.top + rect.height / 2;
@@ -427,13 +441,14 @@
         row.classList.add(after ? 'drop-after' : 'drop-before');
       });
       row.addEventListener('drop', (e) => {
-        if (dragFrom < 0) return;
+        if (!dragState || dragState.kind !== 'playlist') return;
         e.preventDefault();
         e.stopPropagation();
         const rect = row.getBoundingClientRect();
         const after = e.clientY > rect.top + rect.height / 2;
-        moveTrack(dragFrom, index, after);
+        moveTrack(dragState.from, index, after);
         clearDropMarks();
+        dragState = null;
       });
     }
 
@@ -541,44 +556,72 @@
     }
   }
 
+  function trackById(id) {
+    return state.queue.find((t) => t.id === id) || null;
+  }
+
+  function queueAdd(id, at = null) {
+    if (!trackById(id)) return;
+    if (at === null || at > state.upNext.length) state.upNext.push(id);
+    else state.upNext.splice(Math.max(0, at), 0, id);
+    renderUpNext();
+    persist();
+  }
+
+  function queueRemoveAt(position) {
+    if (position < 0 || position >= state.upNext.length) return;
+    state.upNext.splice(position, 1);
+    renderUpNext();
+    persist();
+  }
+
+  function queueMove(from, to) {
+    if (from === to || from < 0 || from >= state.upNext.length) return;
+    const [id] = state.upNext.splice(from, 1);
+    const target = Math.max(0, Math.min(state.upNext.length, to > from ? to - 1 : to));
+    state.upNext.splice(target, 0, id);
+    renderUpNext();
+    persist();
+  }
+
+  function queueClear() {
+    if (!state.upNext.length) return;
+    state.upNext = [];
+    renderUpNext();
+    persist(true);
+    toast('Queue cleared.');
+  }
+
   function renderUpNext() {
     const list = $('unList');
     const wrap = $('upnext');
     list.innerHTML = '';
 
-    if (!state.queue.length) {
-      wrap.hidden = true;
-      return;
-    }
-    wrap.hidden = false;
+    const ids = state.upNext.filter((id) => trackById(id));
+    if (ids.length !== state.upNext.length) state.upNext = ids;
 
-    const upcoming = [];
-    for (let i = state.index + 1; i < state.queue.length && upcoming.length < 4; i += 1) {
-      upcoming.push({ track: state.queue[i], index: i });
-    }
-    if (!upcoming.length && state.repeat !== 'off') {
-      for (let i = 0; i < state.queue.length && upcoming.length < 4; i += 1) {
-        if (i === state.index) continue;
-        upcoming.push({ track: state.queue[i], index: i });
-      }
-    }
+    $('unCount').textContent = ids.length ? `${ids.length} queued` : 'empty';
+    $('clearQueueBtn').hidden = ids.length === 0;
 
-    $('unCount').textContent = upcoming.length ? `${upcoming.length} queued` : 'end of playlist';
-
-    if (!upcoming.length) {
+    if (!ids.length) {
       const empty = document.createElement('div');
       empty.className = 'un-empty';
-      empty.textContent = 'Nothing queued — repeat is off.';
+      empty.textContent = 'Queue is empty — drag a track here, or use + on a row.';
       list.appendChild(empty);
       return;
     }
 
-    for (const { track, index } of upcoming) {
+    ids.forEach((id, position) => {
+      const track = trackById(id);
       const row = document.createElement('div');
       row.className = 'un-row';
+      row.draggable = true;
+      row.dataset.pos = String(position);
+
       const idx = document.createElement('span');
       idx.className = 'un-idx';
-      idx.textContent = String(index + 1).padStart(2, '0');
+      idx.textContent = String(position + 1).padStart(2, '0');
+
       const title = document.createElement('div');
       title.className = 'un-title';
       title.textContent = track.title || 'Unknown title';
@@ -587,13 +630,77 @@
         sub.textContent = ` — ${track.artist}`;
         title.appendChild(sub);
       }
+
       const dur = document.createElement('span');
       dur.className = 'un-dur';
       dur.textContent = track.duration ? fmt(track.duration) : '--:--';
-      row.append(idx, title, dur);
-      row.addEventListener('click', () => playIndex(index));
+
+      const playBtn = document.createElement('button');
+      playBtn.className = 'group-btn';
+      playBtn.type = 'button';
+      playBtn.title = 'Play this now';
+      playBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>';
+      playBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.upNext.splice(position, 1);
+        playIndex(state.queue.indexOf(track));
+      });
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'group-btn danger';
+      removeBtn.type = 'button';
+      removeBtn.title = 'Remove from queue';
+      removeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        queueRemoveAt(position);
+      });
+
+      row.append(idx, title, dur, playBtn, removeBtn);
+      row.addEventListener('dblclick', () => {
+        state.upNext.splice(position, 1);
+        playIndex(state.queue.indexOf(track));
+      });
+
+      row.addEventListener('dragstart', (e) => {
+        dragState = { kind: 'queue', from: position };
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        try {
+          e.dataTransfer.setData('text/plain', String(position));
+        } catch {
+          /* ignore */
+        }
+      });
+      row.addEventListener('dragend', () => {
+        dragState = null;
+        row.classList.remove('dragging');
+        clearDropMarks();
+      });
+      row.addEventListener('dragover', (e) => {
+        if (!dragState) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = row.getBoundingClientRect();
+        const after = e.clientY > rect.top + rect.height / 2;
+        clearDropMarks();
+        row.classList.add(after ? 'drop-after' : 'drop-before');
+      });
+      row.addEventListener('drop', (e) => {
+        if (!dragState) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = row.getBoundingClientRect();
+        const after = e.clientY > rect.top + rect.height / 2;
+        const to = position + (after ? 1 : 0);
+        if (dragState.kind === 'queue') queueMove(dragState.from, to);
+        else if (dragState.kind === 'playlist') queueAdd(dragState.id, to);
+        clearDropMarks();
+        dragState = null;
+      });
+
       list.appendChild(row);
-    }
+    });
   }
 
   function renderAll() {
@@ -692,6 +799,15 @@
   }
 
   function next(auto = false) {
+    // An explicit queue always wins over playlist order.
+    while (state.upNext.length) {
+      const id = state.upNext.shift();
+      const index = state.queue.findIndex((t) => t.id === id);
+      if (index >= 0) {
+        loadTrack(index, true);
+        return;
+      }
+    }
     const index = nextIndex(auto);
     if (index < 0) {
       stopPlayback();
@@ -1000,12 +1116,34 @@
   function bindUi() {
     $('addFiles').addEventListener('click', addFiles);
     $('addFolder').addEventListener('click', addFolder);
+    $('clearQueueBtn').addEventListener('click', queueClear);
+
+    // Dropping anywhere on the queue panel appends to the end.
+    const queuePanel = $('upnext');
+    queuePanel.addEventListener('dragover', (e) => {
+      if (!dragState) return;
+      e.preventDefault();
+      queuePanel.classList.add('drop-target');
+    });
+    queuePanel.addEventListener('dragleave', (e) => {
+      if (!queuePanel.contains(e.relatedTarget)) queuePanel.classList.remove('drop-target');
+    });
+    queuePanel.addEventListener('drop', (e) => {
+      queuePanel.classList.remove('drop-target');
+      if (!dragState) return;
+      e.preventDefault();
+      if (dragState.kind === 'playlist') queueAdd(dragState.id, null);
+      clearDropMarks();
+      dragState = null;
+    });
+
     $('clearQueue').addEventListener('click', () => {
       if (!state.queue.length) return;
       audio.pause();
       audio.removeAttribute('src');
       state.queue = [];
       state.groups = [];
+      state.upNext = [];
       state.index = -1;
       renderAll();
       pushPlayer(true);
@@ -1158,6 +1296,7 @@
     const s = info.state;
     state.queue = Array.isArray(s.queue) ? s.queue : [];
     state.groups = Array.isArray(s.groups) ? s.groups : [];
+    state.upNext = Array.isArray(s.upNext) ? s.upNext : [];
     state.sort = sortApi.SORT_MODES.includes(s.sort) ? s.sort : 'manual';
     state.index = Number.isInteger(s.index) ? s.index : (state.queue.length ? 0 : -1);
     state.volume = Number.isFinite(s.volume) ? s.volume : 0.8;
