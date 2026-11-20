@@ -163,11 +163,12 @@ function registerIpc() {
       title: 'Add a folder of music',
       properties: ['openDirectory']
     });
-    if (result.canceled || !result.filePaths.length) return [];
+    if (result.canceled || !result.filePaths.length) return { files: [], folder: '' };
+    const folder = result.filePaths[0];
     const found = [];
-    await scanFolder(result.filePaths[0], found);
+    await scanFolder(folder, found);
     found.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-    return found;
+    return { files: found, folder };
   });
 
   ipcMain.handle('library:inspect', async (_event, paths) => {
@@ -238,6 +239,20 @@ async function runSelfTest() {
 
     const seeded = await js('document.querySelectorAll("#tracklist .track").length');
     check('playlist renders seeded tracks', seeded === 2, { rows: seeded });
+
+    const groupInfo = await js(`JSON.stringify({
+      heads: document.querySelectorAll('#tracklist .group-head').length,
+      name: (document.querySelector('#tracklist .group-name') || {}).textContent,
+      sort: (document.querySelector('#tracklist .group-sort') || {}).value,
+      first: (document.querySelector('#tracklist .track .t-title') || {}).textContent
+    })`).then(JSON.parse);
+    check('album group header renders', groupInfo.heads === 1 && groupInfo.name === 'Chrome Dreams' && groupInfo.sort === 'filename', groupInfo);
+    check('per-album sort orders by filename', groupInfo.first === 'Neon Skyline', groupInfo);
+
+    await js(`(() => { const s = document.querySelector('#tracklist .group-sort'); s.value = 'date'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+    await wait(300);
+    const afterDate = await js('document.querySelector("#tracklist .track .t-title").textContent');
+    check('per-album sort switches to date created', afterDate === 'Untagged Track', { first: afterDate });
 
     const meta = await js(`JSON.stringify({
       title: document.getElementById('npTitle').textContent,
@@ -330,6 +345,10 @@ async function runSelfTest() {
       queue: persisted.queue.length,
       width: persisted.overlay && persisted.overlay.width
     });
+    check('album group persisted', Array.isArray(persisted.groups) && persisted.groups.length === 1 && persisted.groups[0].name === 'Chrome Dreams', {
+      groups: persisted.groups && persisted.groups.length,
+      sort: persisted.groups && persisted.groups[0] && persisted.groups[0].sort
+    });
 
     console.log(`[selftest] ${failures === 0 ? 'ALL PASS' : `${failures} FAILURE(S)`} ${JSON.stringify(results)}`);
     app.exit(failures === 0 ? 0 : 1);
@@ -390,8 +409,14 @@ if (!gotLock) {
     if (SELFTEST) {
       const mediaDir = path.join(__dirname, 'smoke', 'media');
       const files = ['01-neon-skyline.mp3', 'Untagged Track.wav'].map((f) => path.join(mediaDir, f));
-      const tracks = await mapLimit(files, 2, (file) => metadata.inspectTrack(file));
-      store.state.queue = tracks.filter(Boolean);
+      const tracks = (await mapLimit(files, 2, (file) => metadata.inspectTrack(file))).filter(Boolean);
+      const group = { id: 'gtest', name: 'Chrome Dreams', path: mediaDir, sort: 'filename', collapsed: false };
+      tracks.forEach((track, i) => {
+        track.groupId = group.id;
+        track.addedAt = i === 0 ? 2000 : 1000;
+      });
+      store.state.groups = [group];
+      store.state.queue = tracks;
       store.state.index = 0;
       store.state.position = 0;
     }

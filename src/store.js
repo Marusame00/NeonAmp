@@ -34,8 +34,12 @@ const DEFAULT_STATE = {
   shuffle: false,
   repeat: 'off',
   position: 0,
+  sort: 'manual',
+  groups: [],
   overlay: { ...DEFAULT_OVERLAY }
 };
+
+const SORT_MODES = ['manual', 'date', 'alpha', 'filename', 'artist', 'album', 'duration'];
 
 const clamp = (value, min, max, fallback) => {
   const n = Number(value);
@@ -83,22 +87,44 @@ function sanitizeTrack(raw) {
     duration: Number.isFinite(raw.duration) ? raw.duration : 0,
     artwork: typeof raw.artwork === 'string' ? raw.artwork : null,
     missing: Boolean(raw.missing),
-    error: typeof raw.error === 'string' ? raw.error : null
+    error: typeof raw.error === 'string' ? raw.error : null,
+    groupId: typeof raw.groupId === 'string' && raw.groupId ? raw.groupId : null,
+    addedAt: Number.isFinite(raw.addedAt) ? raw.addedAt : 0,
+    trackNo: Number.isFinite(raw.trackNo) ? raw.trackNo : 0
+  };
+}
+
+function sanitizeGroup(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  if (typeof raw.id !== 'string' || !raw.id) return null;
+  return {
+    id: raw.id,
+    name: String(raw.name || 'Untitled album').slice(0, 120),
+    path: typeof raw.path === 'string' ? raw.path : '',
+    sort: SORT_MODES.includes(raw.sort) ? raw.sort : 'manual',
+    collapsed: Boolean(raw.collapsed)
   };
 }
 
 function sanitizeState(input) {
   const src = input && typeof input === 'object' ? input : {};
   const queue = Array.isArray(src.queue) ? src.queue.map(sanitizeTrack).filter(Boolean) : [];
+  const groups = Array.isArray(src.groups) ? src.groups.map(sanitizeGroup).filter(Boolean) : [];
+  const groupIds = new Set(groups.map((g) => g.id));
+  for (const track of queue) {
+    if (track.groupId && !groupIds.has(track.groupId)) track.groupId = null;
+  }
   const index = Number.isInteger(src.index) && src.index >= 0 && src.index < queue.length ? src.index : (queue.length ? 0 : -1);
   return {
     queue,
+    groups,
     index,
     volume: clamp(src.volume, 0, 1, DEFAULT_STATE.volume),
     muted: Boolean(src.muted),
     shuffle: Boolean(src.shuffle),
     repeat: ['off', 'all', 'one'].includes(src.repeat) ? src.repeat : 'off',
     position: clamp(src.position, 0, 86400, 0),
+    sort: SORT_MODES.includes(src.sort) ? src.sort : 'manual',
     overlay: sanitizeOverlay(src.overlay)
   };
 }
@@ -126,7 +152,9 @@ class Store {
     if (!patch || typeof patch !== 'object') return this.state;
     const next = { ...this.state };
     if (Array.isArray(patch.queue)) next.queue = patch.queue.map(sanitizeTrack).filter(Boolean);
+    if (Array.isArray(patch.groups)) next.groups = patch.groups.map(sanitizeGroup).filter(Boolean);
     if (Number.isInteger(patch.index)) next.index = patch.index;
+    if ('sort' in patch && SORT_MODES.includes(patch.sort)) next.sort = patch.sort;
     if ('volume' in patch) next.volume = clamp(patch.volume, 0, 1, next.volume);
     if ('muted' in patch) next.muted = Boolean(patch.muted);
     if ('shuffle' in patch) next.shuffle = Boolean(patch.shuffle);
@@ -162,4 +190,4 @@ class Store {
   }
 }
 
-module.exports = { Store, DEFAULT_OVERLAY, DEFAULT_STATE, sanitizeOverlay, sanitizeTrack, sanitizeState };
+module.exports = { Store, DEFAULT_OVERLAY, DEFAULT_STATE, SORT_MODES, sanitizeOverlay, sanitizeTrack, sanitizeGroup, sanitizeState };

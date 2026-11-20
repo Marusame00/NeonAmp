@@ -88,7 +88,10 @@ async function inspectTrack(filePath) {
     duration: 0,
     artwork: null,
     missing: false,
-    error: null
+    error: null,
+    groupId: null,
+    addedAt: 0,
+    trackNo: 0
   };
 
   let stat;
@@ -99,6 +102,11 @@ async function inspectTrack(filePath) {
   }
   if (!stat.isFile()) return { ...base, missing: true, error: 'Not a file' };
   if (!isAudioFile(filePath)) return { ...base, error: 'Unsupported format' };
+
+  // "Date created" sorting: prefer the real creation time, fall back to mtime.
+  const birth = stat.birthtimeMs && stat.birthtimeMs > 0 ? stat.birthtimeMs : 0;
+  const modified = stat.mtimeMs && stat.mtimeMs > 0 ? stat.mtimeMs : 0;
+  base.addedAt = birth || modified || Date.now();
 
   try {
     const mm = await loadMetadataModule();
@@ -111,6 +119,7 @@ async function inspectTrack(filePath) {
       : (typeof common.artist === 'string' ? common.artist : '');
     const album = typeof common.album === 'string' ? common.album : '';
     const duration = Number.isFinite(format.duration) ? format.duration : 0;
+    const trackNo = common.track && Number.isFinite(common.track.no) ? common.track.no : 0;
     const artwork = await storeArtwork(id, pickPicture(common.picture));
     return {
       ...base,
@@ -118,6 +127,7 @@ async function inspectTrack(filePath) {
       artist: artist.trim(),
       album: album.trim(),
       duration,
+      trackNo,
       artwork
     };
   } catch (err) {

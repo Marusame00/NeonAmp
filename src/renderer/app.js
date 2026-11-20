@@ -29,13 +29,17 @@
 
   const state = {
     queue: [],
+    groups: [],
     index: -1,
     volume: 0.8,
     muted: false,
     shuffle: false,
     repeat: 'off',
+    sort: 'manual',
     overlay: { ...DEFAULT_OVERLAY }
   };
+
+  const sortApi = window.NeonAmpSort;
 
   let server = { url: 'http://127.0.0.1:8765/' };
   let filter = '';
@@ -94,11 +98,13 @@
   function persist(immediate = false) {
     const payload = {
       queue: state.queue,
+      groups: state.groups,
       index: state.index,
       volume: state.volume,
       muted: state.muted,
       shuffle: state.shuffle,
       repeat: state.repeat,
+      sort: state.sort,
       position: Number.isFinite(audio.currentTime) ? audio.currentTime : 0
     };
     if (immediate) {
@@ -143,77 +149,260 @@
   }
 
   /* ---------------- rendering ---------------- */
+  function sectionsFor() {
+    const q = filter.trim().toLowerCase();
+    const matches = (track) => {
+      if (!q) return true;
+      const hay = `${track.title} ${track.artist} ${track.album} ${track.path}`.toLowerCase();
+      return hay.includes(q);
+    };
+
+    const sections = [];
+    for (const group of state.groups) {
+      const found = [];
+      state.queue.forEach((track, index) => {
+        if (track.groupId === group.id && matches(track)) found.push({ track, index });
+      });
+      const ordered = sortApi.sortTracks(found.map((f) => f.track), group.sort);
+      const byTrack = new Map(found.map((f) => [f.track, f.index]));
+      sections.push({
+        group,
+        sort: group.sort,
+        rows: ordered.map((track) => ({ track, index: byTrack.get(track) }))
+      });
+    }
+
+    const loose = [];
+    state.queue.forEach((track, index) => {
+      if (!track.groupId && matches(track)) loose.push({ track, index });
+    });
+    if (loose.length) {
+      const ordered = sortApi.sortTracks(loose.map((f) => f.track), state.sort);
+      const byTrack = new Map(loose.map((f) => [f.track, f.index]));
+      sections.push({
+        group: null,
+        sort: state.sort,
+        rows: ordered.map((track) => ({ track, index: byTrack.get(track) }))
+      });
+    }
+    return sections;
+  }
+
   function renderTracklist() {
     const list = $('tracklist');
-    const q = filter.trim().toLowerCase();
-    const items = [];
-    state.queue.forEach((track, index) => {
-      if (!q) {
-        items.push({ track, index });
-        return;
+    const sections = sectionsFor();
+    const frag = document.createDocumentFragment();
+    let shown = 0;
+    let matched = 0;
+
+    for (const section of sections) {
+      matched += section.rows.length;
+      if (!section.rows.length) continue;
+      if (section.group) frag.appendChild(buildGroupHeader(section));
+      if (section.group && section.group.collapsed) continue;
+      for (const row of section.rows) {
+        if (shown >= 1000) break;
+        frag.appendChild(buildTrackRow(row.track, row.index, section.sort));
+        shown += 1;
       }
-      const hay = `${track.title} ${track.artist} ${track.album} ${track.path}`.toLowerCase();
-      if (hay.includes(q)) items.push({ track, index });
+    }
+
+    list.innerHTML = '';
+    list.appendChild(frag);
+    $('emptyState').hidden = state.queue.length > 0;
+    list.hidden = state.queue.length === 0;
+    $('trackCount').textContent = String(state.queue.length);
+    $('totalTime').textContent = fmt(state.queue.reduce((sum, t) => sum + (t.duration || 0), 0));
+    const anyManual = sections.some((s) => s.sort === 'manual' && s.rows.length);
+    $('dragHint').textContent = anyManual ? 'drag rows to reorder' : 'sorted — set Manual to drag';
+    if (matched > shown) {
+      const note = document.createElement('div');
+      note.className = 'panel-foot';
+      note.textContent = `Showing first ${shown} of ${matched} matches — refine the filter.`;
+      list.appendChild(note);
+    }
+  }
+
+  function buildGroupHeader(section) {
+    const group = section.group;
+    const head = document.createElement('div');
+    head.className = 'group-head';
+    head.dataset.group = group.id;
+
+    const chevron = document.createElement('button');
+    chevron.className = 'group-chevron';
+    chevron.type = 'button';
+    chevron.title = group.collapsed ? 'Expand album' : 'Collapse album';
+    chevron.setAttribute('aria-expanded', String(!group.collapsed));
+    chevron.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>';
+    if (group.collapsed) chevron.classList.add('collapsed');
+    chevron.addEventListener('click', () => {
+      group.collapsed = !group.collapsed;
+      renderTracklist();
+      persist();
     });
 
-    const capped = items.slice(0, 1000);
-    const frag = document.createDocumentFragment();
+    const name = document.createElement('span');
+    name.className = 'group-name';
+    name.textContent = group.name;
+    name.title = `${group.path || group.name} — double-click to rename`;
+    name.addEventListener('dblclick', () => startRename(head, group, name));
 
-    for (const { track, index } of capped) {
-      const row = document.createElement('div');
-      row.className = 'track';
-      row.dataset.index = String(index);
-      row.draggable = true;
-      row.setAttribute('role', 'option');
-      if (index === state.index) {
-        row.classList.add('active');
-        if (!audio.paused) row.classList.add('playing');
+    const count = document.createElement('span');
+    count.className = 'group-count';
+    count.textContent = String(section.rows.length);
+
+    const sortSel = document.createElement('select');
+    sortSel.className = 'sort-select group-sort';
+    sortSel.title = 'Sort order for this album';
+    for (const mode of sortApi.SORT_MODES) {
+      const opt = document.createElement('option');
+      opt.value = mode;
+      opt.textContent = sortApi.SORT_LABELS[mode] || mode;
+      sortSel.appendChild(opt);
+    }
+    sortSel.value = group.sort;
+    sortSel.addEventListener('change', () => {
+      group.sort = sortSel.value;
+      renderTracklist();
+      persist();
+    });
+
+    const renameBtn = document.createElement('button');
+    renameBtn.className = 'group-btn';
+    renameBtn.type = 'button';
+    renameBtn.title = 'Rename album';
+    renameBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16z"/><path d="M14 6l4 4"/></svg>';
+    renameBtn.addEventListener('click', () => startRename(head, group, name));
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'group-btn danger';
+    removeBtn.type = 'button';
+    removeBtn.title = 'Remove album and its tracks';
+    removeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>';
+    removeBtn.addEventListener('click', () => removeGroup(group.id));
+
+    head.append(chevron, name, count, sortSel, renameBtn, removeBtn);
+    return head;
+  }
+
+  function startRename(head, group, nameEl) {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'group-rename';
+    input.value = group.name;
+    input.maxLength = 120;
+    input.spellcheck = false;
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let done = false;
+    const commit = (save) => {
+      if (done) return;
+      done = true;
+      const value = input.value.trim();
+      if (save && value && value !== group.name) {
+        group.name = value;
+        persist(true);
       }
-      if (track.missing || track.error) row.classList.add('missing');
+      renderTracklist();
+    };
 
-      const idx = document.createElement('span');
-      idx.className = 'idx';
-      idx.textContent = String(index + 1).padStart(2, '0');
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commit(true);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        commit(false);
+      }
+      e.stopPropagation();
+    });
+    input.addEventListener('blur', () => commit(true));
+  }
 
-      const thumb = document.createElement('div');
-      thumb.className = 'thumb';
-      if (track.artwork) {
-        const img = document.createElement('img');
-        img.src = server.url.replace(/\/$/, '') + track.artwork;
-        img.alt = '';
-        img.loading = 'lazy';
-        img.onerror = () => {
-          thumb.innerHTML = '';
-          thumb.appendChild(noteIcon());
-        };
-        thumb.appendChild(img);
-      } else {
+  function removeGroup(groupId) {
+    const group = state.groups.find((g) => g.id === groupId);
+    if (!group) return;
+    const doomed = state.queue.filter((t) => t.groupId === groupId);
+    const playing = currentTrack();
+    const playingRemoved = playing && playing.groupId === groupId;
+
+    state.queue = state.queue.filter((t) => t.groupId !== groupId);
+    state.groups = state.groups.filter((g) => g.id !== groupId);
+
+    if (playingRemoved) {
+      audio.pause();
+      audio.removeAttribute('src');
+      state.index = state.queue.length ? 0 : -1;
+      pushPlayer(true);
+    } else if (state.index >= state.queue.length) {
+      state.index = state.queue.length ? state.queue.length - 1 : -1;
+    }
+
+    renderAll();
+    persist(true);
+    toast(`Removed “${group.name}” (${doomed.length} track${doomed.length === 1 ? '' : 's'}).`);
+  }
+
+  function buildTrackRow(track, index, sortMode) {
+    const row = document.createElement('div');
+    row.className = 'track';
+    row.dataset.index = String(index);
+    row.draggable = sortMode === 'manual';
+    row.setAttribute('role', 'option');
+    if (index === state.index) {
+      row.classList.add('active');
+      if (!audio.paused) row.classList.add('playing');
+    }
+    if (track.missing || track.error) row.classList.add('missing');
+
+    const idx = document.createElement('span');
+    idx.className = 'idx';
+    idx.textContent = String(index + 1).padStart(2, '0');
+
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    if (track.artwork) {
+      const img = document.createElement('img');
+      img.src = server.url.replace(/\/$/, '') + track.artwork;
+      img.alt = '';
+      img.loading = 'lazy';
+      img.onerror = () => {
+        thumb.innerHTML = '';
         thumb.appendChild(noteIcon());
-      }
+      };
+      thumb.appendChild(img);
+    } else {
+      thumb.appendChild(noteIcon());
+    }
 
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-      const title = document.createElement('div');
-      title.className = 't-title';
-      title.textContent = track.title || 'Unknown title';
-      const sub = document.createElement('div');
-      sub.className = 't-sub';
-      sub.textContent = track.error
-        ? track.error
-        : [track.artist || 'Unknown artist', track.album].filter(Boolean).join(' · ');
-      meta.append(title, sub);
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const title = document.createElement('div');
+    title.className = 't-title';
+    title.textContent = track.title || 'Unknown title';
+    const sub = document.createElement('div');
+    sub.className = 't-sub';
+    sub.textContent = track.error
+      ? track.error
+      : [track.artist || 'Unknown artist', track.album].filter(Boolean).join(' · ');
+    meta.append(title, sub);
 
-      const dur = document.createElement('span');
-      dur.className = 'dur';
-      dur.textContent = track.duration ? fmt(track.duration) : '--:--';
+    const dur = document.createElement('span');
+    dur.className = 'dur';
+    dur.textContent = track.duration ? fmt(track.duration) : '--:--';
 
-      const eq = document.createElement('span');
-      eq.className = 'eq';
-      for (let i = 0; i < 4; i += 1) eq.appendChild(document.createElement('i'));
+    const eq = document.createElement('span');
+    eq.className = 'eq';
+    for (let i = 0; i < 4; i += 1) eq.appendChild(document.createElement('i'));
 
-      row.append(idx, thumb, meta, dur, eq);
-      row.addEventListener('dblclick', () => playIndex(index));
-      row.addEventListener('click', () => selectIndex(index, false));
+    row.append(idx, thumb, meta, dur, eq);
+    row.addEventListener('dblclick', () => playIndex(index));
+    row.addEventListener('click', () => selectIndex(index, false));
+
+    if (sortMode === 'manual') {
       row.addEventListener('dragstart', (e) => {
         dragFrom = index;
         row.classList.add('dragging');
@@ -246,22 +435,9 @@
         moveTrack(dragFrom, index, after);
         clearDropMarks();
       });
-
-      frag.appendChild(row);
     }
 
-    list.innerHTML = '';
-    list.appendChild(frag);
-    $('emptyState').hidden = state.queue.length > 0;
-    list.hidden = state.queue.length === 0;
-    $('trackCount').textContent = String(state.queue.length);
-    $('totalTime').textContent = fmt(state.queue.reduce((sum, t) => sum + (t.duration || 0), 0));
-    if (items.length > capped.length) {
-      const note = document.createElement('div');
-      note.className = 'panel-foot';
-      note.textContent = `Showing first ${capped.length} of ${items.length} matches — refine the filter.`;
-      list.appendChild(note);
-    }
+    return row;
   }
 
   function noteIcon() {
@@ -539,6 +715,12 @@
 
   function moveTrack(from, to, after) {
     if (from === to || from < 0 || to < 0) return;
+    const moving = state.queue[from];
+    const targetTrack = state.queue[to];
+    if (!moving || !targetTrack) return;
+    // Reordering only makes sense inside one album; cross-album drops are ignored.
+    if ((moving.groupId || null) !== (targetTrack.groupId || null)) return;
+
     const [item] = state.queue.splice(from, 1);
     let target = to;
     if (from < to) target -= 1;
@@ -610,7 +792,7 @@
   });
 
   /* ---------------- library ---------------- */
-  async function addPaths(paths) {
+  async function addPaths(paths, groupId = null) {
     if (!paths || !paths.length) return;
     const known = new Set(state.queue.map((t) => t.path.toLowerCase()));
     const fresh = [];
@@ -625,13 +807,14 @@
       return;
     }
 
-    toast(`Reading ${fresh.length} file${fresh.length === 1 ? '' : 's'}…`);
+    toast(`Reading ${fresh.length} file${fresh.length === 1 ? '' : 's'}...`);
     const inspected = await api.inspect(fresh);
     const valid = inspected.filter(Boolean);
     if (!valid.length) {
       toast('No supported audio files found.', 'err');
       return;
     }
+    for (const track of valid) track.groupId = groupId;
     state.queue.push(...valid);
     if (state.index < 0) state.index = 0;
     renderAll();
@@ -642,16 +825,42 @@
 
   async function addFiles() {
     const paths = await api.addFiles();
-    await addPaths(paths);
+    await addPaths(paths, null);
   }
 
   async function addFolder() {
-    const paths = await api.addFolder();
+    const result = await api.addFolder();
+    const paths = Array.isArray(result) ? result : (result && result.files) || [];
+    const folderPath = (result && result.folder) || '';
     if (!paths.length) {
       toast('No MP3 or WAV files in that folder.', 'err');
       return;
     }
-    await addPaths(paths);
+
+    const name = folderPath
+      ? folderPath.split(/[\\/]/).filter(Boolean).pop() || 'Untitled album'
+      : 'Untitled album';
+
+    const group = {
+      id: `g${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      name,
+      path: folderPath,
+      sort: state.sort === 'manual' ? 'filename' : state.sort,
+      collapsed: false
+    };
+    state.groups.push(group);
+
+    await addPaths(paths, group.id);
+
+    if (!state.queue.some((t) => t.groupId === group.id)) {
+      state.groups = state.groups.filter((g) => g.id !== group.id);
+      renderAll();
+      persist(true);
+      return;
+    }
+    renderAll();
+    persist(true);
+    toast(`Added album “${name}”. Double-click its name to rename.`);
   }
 
   /* ---------------- overlay settings ---------------- */
@@ -796,6 +1005,7 @@
       audio.pause();
       audio.removeAttribute('src');
       state.queue = [];
+      state.groups = [];
       state.index = -1;
       renderAll();
       pushPlayer(true);
@@ -806,6 +1016,12 @@
     $('search').addEventListener('input', (e) => {
       filter = e.target.value;
       renderTracklist();
+    });
+
+    $('globalSort').addEventListener('change', (e) => {
+      state.sort = e.target.value;
+      renderTracklist();
+      persist(true);
     });
 
     $('play').addEventListener('click', togglePlay);
@@ -941,6 +1157,8 @@
 
     const s = info.state;
     state.queue = Array.isArray(s.queue) ? s.queue : [];
+    state.groups = Array.isArray(s.groups) ? s.groups : [];
+    state.sort = sortApi.SORT_MODES.includes(s.sort) ? s.sort : 'manual';
     state.index = Number.isInteger(s.index) ? s.index : (state.queue.length ? 0 : -1);
     state.volume = Number.isFinite(s.volume) ? s.volume : 0.8;
     state.muted = Boolean(s.muted);
@@ -957,6 +1175,7 @@
     $('volume').value = String(Math.round(state.volume * 100));
     $('volLabel').textContent = `${Math.round(state.volume * 100)}%`;
     setFill($('volume'), state.volume * 100);
+    $('globalSort').value = state.sort;
 
     bindUi();
     bindSettings();

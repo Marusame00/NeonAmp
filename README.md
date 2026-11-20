@@ -49,11 +49,34 @@ the title bar and in the OBS card at the bottom right.
 ## 3. Add music
 
 - **Files** — pick one or more `.mp3` / `.wav` files (also `.flac`, `.ogg`, `.m4a`, `.aac`).
-- **Folder** — recursively scans a folder for supported audio.
+- **Folder** — recursively scans a folder and adds it as a named **album** group.
 - **Drag & drop** files or folders from Explorer straight onto the window.
 
 Titles, artists, albums, durations and embedded cover art are read from the files.
 Missing tags fall back to the filename; missing artwork falls back to a neon glyph.
+
+### Albums and sorting
+
+Adding a folder creates an album group named after the folder. Double-click the
+group name (or use the pencil button) to rename it — useful when the folder name
+is not what you want on screen. The chevron collapses the group, and the trash
+button removes the album and its tracks.
+
+Each album has its own sort order, and the dropdown in the search bar sets the
+default for loose tracks and newly added albums:
+
+| Sort | Order |
+| --- | --- |
+| Manual (drag) | the order you dragged rows into |
+| Date created | file creation time, oldest first (falls back to modified time) |
+| Title A–Z | natural, so `2` sorts before `10` |
+| Filename A–Z | natural, so `01-song` / `02-song` track lists stay in order |
+| Artist | artist, then album, then title |
+| Album / track no. | album, then embedded track number |
+| Duration | shortest first |
+
+Dragging is only enabled while a group is on **Manual**; sorted groups show
+`sorted — set Manual to drag` in the footer.
 
 ## 4. Play
 

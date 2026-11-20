@@ -56,6 +56,16 @@
       <div class="search-row">
         <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/></svg>
         <input id="search" type="search" placeholder="Filter by title, artist or album" spellcheck="false" />
+        <span class="sort-sep"></span>
+        <select id="globalSort" class="sort-select" title="Sort order for loose tracks and new albums">
+          <option value="manual">Manual</option>
+          <option value="date">Date created</option>
+          <option value="alpha">Title A–Z</option>
+          <option value="filename">Filename A–Z</option>
+          <option value="artist">Artist</option>
+          <option value="album">Album / track no.</option>
+          <option value="duration">Duration</option>
+        </select>
       </div>
 
       <div class="tracklist" id="tracklist" role="listbox" aria-label="Playlist"></div>
@@ -69,7 +79,7 @@
       </div>
 
       <div class="panel-foot">
-        <span>drag rows to reorder</span>
+        <span id="dragHint">drag rows to reorder</span>
         <span class="dot-sep">·</span>
         <span>double-click to play</span>
         <span class="spacer"></span>
@@ -273,6 +283,7 @@
   </div>
 </div>
 
+<script src="../sort.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
