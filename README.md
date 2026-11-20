@@ -151,6 +151,9 @@ non-zero on failure and writes screenshots to `smoke/`.
 Generate the test media once with ffmpeg (any 12 s MP3 with cover art plus an
 untagged WAV named `01-neon-skyline.mp3` / `Untagged Track.wav` in `smoke/media`).
 
+The overlay has also been checked in OBS itself (Browser Source, Windows): the
+in-app live preview matches what OBS renders.
+
 ## 8. Packaging (optional)
 `electron-builder` is intentionally **not** installed by default — it pulls a large
 dependency tree. Install it only when you want an installer:
