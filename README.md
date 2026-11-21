@@ -49,7 +49,8 @@ launch with no console window.
 Manual path:
 
 ```bash
-cd "obs mp3 player"
+git clone https://github.com/Marusame00/NeonAmp.git
+cd NeonAmp
 npm install
 ```
 
