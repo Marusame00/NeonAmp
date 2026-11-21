@@ -465,6 +465,11 @@ if (!gotLock) {
       });
       store.state.groups = [group];
       store.state.queue = tracks;
+      // Reset everything the run mutates, so a second consecutive run starts
+      // from the same state as the first. A leftover explicit queue would
+      // otherwise be consumed by next() before the playlist neighbour.
+      store.state.upNext = [];
+      store.state.sort = 'manual';
       store.state.index = 0;
       store.state.position = 0;
     }
