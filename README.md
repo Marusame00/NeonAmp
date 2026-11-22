@@ -35,8 +35,8 @@ Requirements: **Node.js 20+** (or 22+), npm.
 **Prebuilt Windows binaries** are attached to the
 [latest release](https://github.com/Marusame00/NeonAmp/releases/latest):
 
-- `NeonAmp-1.2.0-Setup.exe` — installer, adds a Start Menu entry and desktop shortcut
-- `NeonAmp-1.2.0-Portable.exe` — single file, no installation
+- `NeonAmp-1.2.1-Setup.exe` — installer, adds a Start Menu entry and desktop shortcut
+- `NeonAmp-1.2.1-Portable.exe` — single file, no installation
 
 Neither is code-signed, so Windows SmartScreen will warn on first run
 (**More info → Run anyway**).
