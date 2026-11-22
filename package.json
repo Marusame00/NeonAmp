@@ -1,7 +1,7 @@
 {
   "name": "neonamp",
   "productName": "NeonAmp",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Local MP3/WAV music player with a neon cyberpunk Now Playing overlay for OBS Browser Sources.",
   "main": "main.js",
   "author": "Marusame00",
