@@ -122,6 +122,29 @@ Dragging is only enabled while a group is on **Manual**; sorted groups show
 
 Double-click a row to play it. Single click selects it without starting playback.
 
+### Voice ducking
+
+NeonAmp can lower the music by itself while you talk into your microphone, so your
+voice stays on top of the track.
+
+- Click the **microphone button** next to the volume slider to turn it on (one click).
+- Click the **chevron** beside it to open the ducking panel, then **Calibrate** and
+  talk normally for 4 seconds. That sets the sensitivity to your room and your voice.
+- **Music while talking** is how low the music goes, as a percentage of your current
+  volume — `35%` means it drops to about a third.
+- The music fades down quickly when you start speaking (about a quarter second) and,
+  after a short pause, eases back up over roughly two seconds once you stop.
+- **Microphone** picks the input device; "System default" follows Windows.
+- Use headphones. If the music plays through speakers and your mic picks it up, the
+  music itself can trigger ducking — raise **Sensitivity trigger** until it stops.
+
+It listens to your microphone locally only — nothing is recorded, saved or sent
+anywhere. Windows must allow it first: **Settings → Privacy → Microphone → Let
+desktop apps access your microphone**.
+
+For finer control (curves, sidechain, per-source ducking) use OBS's own compressor
+filter on your mic and music sources instead.
+
 ## 5. OBS Browser Source
 
 1. In OBS: **Sources → + → Browser**.
@@ -173,9 +196,10 @@ Everything is saved to `state.json` in the app's user-data folder
 and asserts, end to end: playlist rendering, tag + embedded-artwork extraction,
 playback reaching the server, overlay receiving the track, elapsed clock, the
 overlay card staying dark (a regression guard for the glow scale), overlay text,
-pause freezing position, seek, next-track, stop, state persistence, and the
-editable queue (add, reorder, play-next, clear). It runs 22 checks, exits
-non-zero on failure and writes screenshots to `smoke/`.
+pause freezing position, seek, next-track, stop, state persistence, the
+editable queue (add, reorder, play-next, clear), and voice ducking (toggle, mic
+level, ducking while speaking, the fade envelope, restore on off, persistence).
+It runs 28 checks, exits non-zero on failure and writes screenshots to `smoke/`.
 
 Generate the test media once with ffmpeg (any 12 s MP3 with cover art plus an
 untagged WAV named `01-neon-skyline.mp3` / `Untagged Track.wav` in `smoke/media`).

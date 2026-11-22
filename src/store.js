@@ -26,6 +26,13 @@ const DEFAULT_OVERLAY = {
   stopped: 'placeholder'
 };
 
+const DEFAULT_DUCKING = {
+  enabled: false,
+  duckTo: 0.35,
+  threshold: 45,
+  deviceId: ''
+};
+
 const DEFAULT_STATE = {
   queue: [],
   groups: [],
@@ -38,6 +45,7 @@ const DEFAULT_STATE = {
   position: 0,
   sort: 'manual',
   groups: [],
+  ducking: { ...DEFAULT_DUCKING },
   overlay: { ...DEFAULT_OVERLAY }
 };
 
@@ -74,6 +82,16 @@ function sanitizeOverlay(input) {
   }
   out.labelText = String(src.labelText ?? DEFAULT_OVERLAY.labelText).slice(0, 40) || DEFAULT_OVERLAY.labelText;
   out.stopped = ['hide', 'placeholder', 'last'].includes(src.stopped) ? src.stopped : DEFAULT_OVERLAY.stopped;
+  return out;
+}
+
+function sanitizeDucking(input) {
+  const src = input && typeof input === 'object' ? input : {};
+  const out = { ...DEFAULT_DUCKING };
+  out.enabled = typeof src.enabled === 'boolean' ? src.enabled : DEFAULT_DUCKING.enabled;
+  out.duckTo = clamp(src.duckTo, 0.05, 0.9, DEFAULT_DUCKING.duckTo);
+  out.threshold = Math.round(clamp(src.threshold, 1, 95, DEFAULT_DUCKING.threshold));
+  out.deviceId = typeof src.deviceId === 'string' ? src.deviceId.slice(0, 200) : '';
   return out;
 }
 
@@ -132,6 +150,7 @@ function sanitizeState(input) {
     repeat: ['off', 'all', 'one'].includes(src.repeat) ? src.repeat : 'off',
     position: clamp(src.position, 0, 86400, 0),
     sort: SORT_MODES.includes(src.sort) ? src.sort : 'manual',
+    ducking: sanitizeDucking(src.ducking),
     overlay: sanitizeOverlay(src.overlay)
   };
 }
@@ -171,6 +190,7 @@ class Store {
     if ('shuffle' in patch) next.shuffle = Boolean(patch.shuffle);
     if ('repeat' in patch) next.repeat = ['off', 'all', 'one'].includes(patch.repeat) ? patch.repeat : next.repeat;
     if ('position' in patch) next.position = clamp(patch.position, 0, 86400, 0);
+    if (patch.ducking) next.ducking = sanitizeDucking({ ...next.ducking, ...patch.ducking });
     if (patch.overlay) next.overlay = sanitizeOverlay({ ...next.overlay, ...patch.overlay });
     this.state = next;
     this.scheduleSave();

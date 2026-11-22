@@ -20,6 +20,8 @@ const SELFTEST = process.argv.includes('--selftest');
 if (SELFTEST) {
   // Keep automated runs away from the real user profile.
   app.setPath('userData', path.join(__dirname, 'smoke', 'userdata'));
+  app.commandLine.appendSwitch('use-fake-device-for-media-stream');
+  app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 }
 
 let mainWindow = null;
@@ -384,7 +386,64 @@ async function runSelfTest() {
     const afterConsume = await js('document.querySelectorAll("#unList .un-row").length');
     check('consumed track leaves the queue', afterConsume === 1, { remaining: afterConsume });
 
-    await wait(900);
+    // ---- voice ducking (runs while music plays, the real use case) ----
+    if ((await apiState()).playback.status !== 'playing') await js('document.getElementById("play").click()');
+    await wait(500);
+    const duckPlaying = (await apiState()).playback.status;
+
+    await js('document.getElementById("duckBtn").click()');
+    await wait(300);
+    const duckPressed = await js('document.getElementById("duckBtn").getAttribute("aria-pressed")');
+    check('duck button toggles on', duckPressed === 'true', { pressed: duckPressed });
+
+    await js(`(() => { const s = document.getElementById('duckThreshold'); s.value = '1'; s.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+    let duckLevel = 0;
+    for (let i = 0; i < 30; i += 1) {
+      duckLevel = Math.max(duckLevel, Number(await js('document.getElementById("duckBtn").dataset.level')));
+      if (duckLevel > 0) break;
+      await wait(50);
+    }
+    check('mic level is measured', Number.isFinite(duckLevel) && duckLevel > 0, { level: duckLevel });
+
+    let duckGain = 1;
+    for (let i = 0; i < 15; i += 1) {
+      duckGain = Number(await js('document.getElementById("duckBtn").dataset.gain'));
+      if (duckGain < 0.6) break;
+      await wait(100);
+    }
+    check('music ducks while voice detected', duckGain < 0.6 && duckPlaying === 'playing', { gain: duckGain, playback: duckPlaying });
+
+    await js(`(() => { const s = document.getElementById('duckThreshold'); s.value = '95'; s.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+    await wait(800);
+    const fade = await js(`new Promise((resolve) => {
+      const out = [];
+      const t0 = performance.now();
+      const id = setInterval(() => {
+        out.push(Number(document.getElementById('duckBtn').dataset.gain));
+        if (performance.now() - t0 >= 1000) { clearInterval(id); resolve(JSON.stringify(out)); }
+      }, 20);
+    })`).then(JSON.parse);
+    const rising = fade.every((v, i) => i === 0 || v >= fade[i - 1]);
+    const between = fade.filter((v) => v > 0.35 && v < 1).length;
+    const early = fade[15] ?? 1;
+    check('ducking fades rather than jumps', rising && between >= 3 && early < 0.99, { samples: fade.length, between, early });
+
+    await js('document.getElementById("duckMore").click()');
+    await wait(400);
+    const duckShot = await mainWindow.webContents.capturePage();
+    await fsp.writeFile(path.join(outDir, 'main-duck.png'), duckShot.toPNG());
+
+    await js('document.getElementById("duckBtn").click()');
+    let duckRestored = 0;
+    for (let i = 0; i < 30; i += 1) {
+      duckRestored = Number(await js('document.getElementById("duckBtn").dataset.gain'));
+      if (duckRestored >= 0.99) break;
+      await wait(100);
+    }
+    check('duck off restores volume', duckRestored >= 0.99, { gain: duckRestored });
+    await js('document.getElementById("stop").click()');
+
+    await wait(1200);
     const persisted = JSON.parse(await fsp.readFile(path.join(app.getPath('userData'), 'state.json'), 'utf8'));
     check('state persisted to disk', Array.isArray(persisted.queue) && persisted.queue.length === 2 && persisted.overlay && persisted.overlay.width === 470, {
       queue: persisted.queue.length,
@@ -396,6 +455,10 @@ async function runSelfTest() {
     });
     check('queue persisted', Array.isArray(persisted.upNext) && persisted.upNext.length === 1, {
       upNext: persisted.upNext && persisted.upNext.length
+    });
+    check('ducking persisted', Boolean(persisted.ducking) && Number.isFinite(persisted.ducking.duckTo) && Number.isFinite(persisted.ducking.threshold), {
+      duckTo: persisted.ducking && persisted.ducking.duckTo,
+      threshold: persisted.ducking && persisted.ducking.threshold
     });
 
     console.log(`[selftest] ${failures === 0 ? 'ALL PASS' : `${failures} FAILURE(S)`} ${JSON.stringify(results)}`);
@@ -472,6 +535,7 @@ if (!gotLock) {
       store.state.sort = 'manual';
       store.state.index = 0;
       store.state.position = 0;
+      store.state.ducking = { enabled: false, duckTo: 0.35, threshold: 45, deviceId: '' };
     }
 
     snapshot.overlay = store.state.overlay;

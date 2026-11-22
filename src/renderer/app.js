@@ -37,6 +37,7 @@
     shuffle: false,
     repeat: 'off',
     sort: 'manual',
+    ducking: { enabled: false, duckTo: 0.35, threshold: 45, deviceId: '' },
     overlay: { ...DEFAULT_OVERLAY }
   };
 
@@ -95,6 +96,236 @@
     return 'playing';
   }
 
+  /* ---------------- voice ducking ---------------- */
+  const DUCK_DEFAULTS = { enabled: false, duckTo: 0.35, threshold: 45, deviceId: '' };
+
+  let duckGain = 1;
+  let duckTimer = null;
+  let duckLastTick = 0;
+  let duckStream = null;
+  let duckCtx = null;
+  let duckAnalyser = null;
+  let duckData = null;
+  let duckLastVoiceAt = 0;
+  let duckLoudTicks = 0;
+  let duckCalibrating = null;
+
+  function applyVolume() {
+    audio.volume = Math.max(0, Math.min(1, state.volume * duckGain));
+  }
+
+  function duckLevelPct(rms) {
+    return Math.max(0, Math.min(1, (20 * Math.log10(Math.max(rms, 1e-6)) + 60) / 60)) * 100;
+  }
+
+  function duckFail(message) {
+    state.ducking.enabled = false;
+    stopDuckStream();
+    duckGain = 1;
+    applyVolume();
+    renderDuck();
+    persist();
+    toast(message, 'err');
+  }
+
+  function onDuckTrackEnded() {
+    duckFail('Microphone disconnected — ducking off.');
+  }
+
+  function stopDuckStream() {
+    if (duckStream) {
+      for (const track of duckStream.getTracks()) {
+        track.removeEventListener('ended', onDuckTrackEnded);
+        track.stop();
+      }
+      duckStream = null;
+    }
+    if (duckCtx) {
+      duckCtx.close().catch(() => {});
+      duckCtx = null;
+    }
+    duckAnalyser = null;
+    duckData = null;
+    duckLoudTicks = 0;
+  }
+
+  async function startDuckMic() {
+    if (duckStream) return true;
+    const deviceId = state.ducking.deviceId;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: deviceId ? { exact: deviceId } : undefined,
+          echoCancellation: false,
+          noiseSuppression: true,
+          autoGainControl: false
+        }
+      });
+      duckStream = stream;
+      duckCtx = new AudioContext();
+      if (duckCtx.state === 'suspended') await duckCtx.resume();
+      const source = duckCtx.createMediaStreamSource(stream);
+      duckAnalyser = duckCtx.createAnalyser();
+      duckAnalyser.fftSize = 1024;
+      duckData = new Float32Array(duckAnalyser.fftSize);
+      source.connect(duckAnalyser);
+      for (const track of stream.getTracks()) track.addEventListener('ended', onDuckTrackEnded);
+      ensureDuckLoop();
+      refreshDuckDevices();
+      return true;
+    } catch (err) {
+      duckFail(`Mic unavailable: ${(err && err.message) || err}`);
+      return false;
+    }
+  }
+
+  function ensureDuckLoop() {
+    if (duckTimer) return;
+    duckLastTick = performance.now();
+    duckTimer = setInterval(duckTick, 20);
+  }
+
+  function maybeStopDuckLoop() {
+    if (!duckTimer || duckStream || duckCalibrating || duckGain < 0.999) return;
+    clearInterval(duckTimer);
+    duckTimer = null;
+    duckGain = 1;
+    applyVolume();
+    paintDuck(0, false);
+  }
+
+  function paintDuck(levelPct, voice) {
+    const btn = $('duckBtn');
+    const gain = duckGain.toFixed(3);
+    if (btn.dataset.gain !== gain) btn.dataset.gain = gain;
+    const level = levelPct.toFixed(1);
+    if (btn.dataset.level !== level) btn.dataset.level = level;
+    $('duckFill').style.width = `${levelPct}%`;
+    $('duckPanel').classList.toggle('talking', Boolean(voice) && state.ducking.enabled);
+  }
+
+  function duckTick() {
+    const now = performance.now();
+    const dt = Math.min(0.25, Math.max(0.001, (now - duckLastTick) / 1000));
+    duckLastTick = now;
+
+    let levelPct = 0;
+    if (duckAnalyser && duckData) {
+      duckAnalyser.getFloatTimeDomainData(duckData);
+      let sum = 0;
+      for (let i = 0; i < duckData.length; i += 1) sum += duckData[i] * duckData[i];
+      levelPct = duckLevelPct(Math.sqrt(sum / duckData.length));
+    }
+
+    if (levelPct >= state.ducking.threshold) duckLoudTicks += 1;
+    else duckLoudTicks = 0;
+    const voice = duckLoudTicks >= 2;
+    if (voice) duckLastVoiceAt = now;
+
+    if (duckCalibrating) duckCollectSample(now, levelPct);
+
+    const target = state.ducking.enabled && now - duckLastVoiceAt < 650 ? state.ducking.duckTo : 1;
+    const tau = target < duckGain ? 0.08 : 0.6;
+    const next = duckGain + (target - duckGain) * (1 - Math.exp(-dt / tau));
+    const changed = Math.abs(next - duckGain) > 0.001;
+    duckGain = next;
+    if (changed) applyVolume();
+
+    paintDuck(levelPct, voice);
+    maybeStopDuckLoop();
+  }
+
+  function duckCollectSample(now, levelPct) {
+    const elapsed = now - duckCalibrating.startedAt;
+    if (elapsed > 300) duckCalibrating.samples.push(levelPct);
+    const left = Math.max(0, Math.ceil((4000 - elapsed) / 1000));
+    const label = `Listening… ${left}`;
+    if ($('duckCalibrate').textContent !== label) $('duckCalibrate').textContent = label;
+    if (elapsed >= 4000) finishDuckCalibration();
+  }
+
+  function finishDuckCalibration() {
+    const cal = duckCalibrating;
+    duckCalibrating = null;
+    $('duckCalibrate').textContent = 'Calibrate';
+    const samples = cal.samples.slice().sort((a, b) => a - b);
+    const pick = (q) => samples[Math.min(samples.length - 1, Math.max(0, Math.round((samples.length - 1) * q)))] || 0;
+    const speech = pick(0.8);
+    const noise = pick(0.2);
+    if (samples.length < 4 || speech - noise < 8) {
+      toast("Couldn't hear you — check the mic and try again.", 'err');
+    } else {
+      state.ducking.threshold = Math.round(Math.min(95, Math.max(1, noise + (speech - noise) * 0.45)));
+      if (!cal.wasEnabled) state.ducking.enabled = true;
+      renderDuck();
+      persist();
+      toast(`Calibrated — sensitivity set to ${state.ducking.threshold}%.`);
+    }
+    if (state.ducking.enabled) {
+      if (!duckStream) startDuckMic();
+    } else {
+      stopDuckStream();
+    }
+    maybeStopDuckLoop();
+  }
+
+  async function duckCalibrate() {
+    if (duckCalibrating) return;
+    const wasEnabled = state.ducking.enabled;
+    if (!duckStream) {
+      const ok = await startDuckMic();
+      if (!ok) return;
+    }
+    duckCalibrating = { samples: [], startedAt: performance.now(), wasEnabled };
+    $('duckCalibrate').textContent = 'Listening… 4';
+    ensureDuckLoop();
+  }
+
+  async function refreshDuckDevices() {
+    const sel = $('duckDevice');
+    if (!sel) return;
+    let devices = [];
+    try {
+      devices = await navigator.mediaDevices.enumerateDevices();
+    } catch {
+      devices = [];
+    }
+    const inputs = devices.filter((d) => d.kind === 'audioinput' && d.deviceId);
+    const current = state.ducking.deviceId;
+    sel.textContent = '';
+    const def = document.createElement('option');
+    def.value = '';
+    def.textContent = 'System default';
+    sel.appendChild(def);
+    inputs.forEach((device, i) => {
+      const opt = document.createElement('option');
+      opt.value = device.deviceId;
+      opt.textContent = device.label || `Microphone ${i + 1}`;
+      sel.appendChild(opt);
+    });
+    sel.value = inputs.some((d) => d.deviceId === current) ? current : '';
+  }
+
+  function renderDuck() {
+    const btn = $('duckBtn');
+    btn.setAttribute('aria-pressed', String(state.ducking.enabled));
+    btn.dataset.gain = duckGain.toFixed(3);
+    $('duckPanel').classList.remove('talking');
+    $('duckOff').classList.toggle('hidden', state.ducking.enabled);
+    const toPct = Math.round(state.ducking.duckTo * 100);
+    $('duckTo').value = String(toPct);
+    setFill($('duckTo'), toPct);
+    $('duckToOut').textContent = `${toPct}%`;
+    $('duckThreshold').value = String(state.ducking.threshold);
+    setFill($('duckThreshold'), state.ducking.threshold);
+    $('duckThresholdOut').textContent = `${state.ducking.threshold}%`;
+    $('duckMarker').style.left = `${state.ducking.threshold}%`;
+    if (!state.ducking.enabled) {
+      $('duckFill').style.width = '0%';
+      btn.dataset.level = '0.0';
+    }
+  }
+
   /* ---------------- persistence ---------------- */
   function persist(immediate = false) {
     const payload = {
@@ -107,6 +338,7 @@
       shuffle: state.shuffle,
       repeat: state.repeat,
       sort: state.sort,
+      ducking: state.ducking,
       position: Number.isFinite(audio.currentTime) ? audio.currentTime : 0
     };
     if (immediate) {
@@ -1192,7 +1424,7 @@
       state.volume = v;
       state.muted = false;
       audio.muted = false;
-      audio.volume = v;
+      applyVolume();
       $('volLabel').textContent = `${Math.round(v * 100)}%`;
       setFill(e.target, v * 100);
       renderTransport();
@@ -1211,6 +1443,50 @@
     });
 
     $('seek').addEventListener('change', () => persist());
+
+    $('duckBtn').addEventListener('click', () => {
+      state.ducking.enabled = !state.ducking.enabled;
+      renderDuck();
+      persist();
+      if (state.ducking.enabled) startDuckMic();
+      else stopDuckStream();
+    });
+
+    $('duckMore').addEventListener('click', () => {
+      const panel = $('duckPanel');
+      panel.classList.toggle('hidden');
+      $('duckMore').setAttribute('aria-expanded', String(!panel.classList.contains('hidden')));
+      if (!panel.classList.contains('hidden')) refreshDuckDevices();
+    });
+
+    $('duckCalibrate').addEventListener('click', () => {
+      duckCalibrate();
+    });
+
+    $('duckTo').addEventListener('input', (e) => {
+      state.ducking.duckTo = Number(e.target.value) / 100;
+      $('duckToOut').textContent = `${Math.round(state.ducking.duckTo * 100)}%`;
+      setFill(e.target, state.ducking.duckTo * 100);
+      applyVolume();
+      persist();
+    });
+
+    $('duckThreshold').addEventListener('input', (e) => {
+      state.ducking.threshold = Number(e.target.value);
+      $('duckThresholdOut').textContent = `${state.ducking.threshold}%`;
+      setFill(e.target, state.ducking.threshold);
+      $('duckMarker').style.left = `${state.ducking.threshold}%`;
+      persist();
+    });
+
+    $('duckDevice').addEventListener('change', (e) => {
+      state.ducking.deviceId = e.target.value;
+      persist();
+      if (state.ducking.enabled) {
+        stopDuckStream();
+        startDuckMic();
+      }
+    });
 
     const copyUrl = async () => {
       await api.copyText(server.url);
@@ -1303,13 +1579,20 @@
     state.muted = Boolean(s.muted);
     state.shuffle = Boolean(s.shuffle);
     state.repeat = s.repeat || 'off';
+    const d = s.ducking || {};
+    state.ducking = {
+      enabled: Boolean(d.enabled),
+      duckTo: Number.isFinite(d.duckTo) ? Math.min(0.9, Math.max(0.05, d.duckTo)) : DUCK_DEFAULTS.duckTo,
+      threshold: Number.isFinite(d.threshold) ? Math.min(95, Math.max(1, Math.round(d.threshold))) : DUCK_DEFAULTS.threshold,
+      deviceId: typeof d.deviceId === 'string' ? d.deviceId : DUCK_DEFAULTS.deviceId
+    };
     state.overlay = { ...DEFAULT_OVERLAY, ...(s.overlay || {}) };
 
     $('serverUrl').textContent = server.url;
     $('overlayUrl').textContent = server.url;
     $('previewFrame').src = server.url;
 
-    audio.volume = state.volume;
+    applyVolume();
     audio.muted = state.muted;
     $('volume').value = String(Math.round(state.volume * 100));
     $('volLabel').textContent = `${Math.round(state.volume * 100)}%`;
@@ -1319,6 +1602,9 @@
     bindUi();
     bindSettings();
     fillOverlayInputs(state.overlay);
+    renderDuck();
+    refreshDuckDevices();
+    if (state.ducking.enabled) startDuckMic();
 
     if (state.queue.length && state.index >= 0) {
       const track = state.queue[state.index];

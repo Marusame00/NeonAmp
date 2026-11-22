@@ -145,6 +145,39 @@
         </button>
         <input type="range" id="volume" class="range vol" min="0" max="100" value="80" step="1" aria-label="Volume" />
         <span class="vol-label" id="volLabel">80%</span>
+        <button class="t-btn small" id="duckBtn" title="Voice ducking — lowers music while you talk" aria-pressed="false">
+          <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/><path d="M9 21h6"/></svg>
+        </button>
+        <button class="t-btn small" id="duckMore" title="Ducking settings" aria-expanded="false">
+          <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
+
+      <div class="duck-panel hidden" id="duckPanel">
+        <div class="duck-meter" id="duckMeter">
+          <span class="duck-fill" id="duckFill"></span>
+          <span class="duck-marker" id="duckMarker"></span>
+          <span class="duck-off" id="duckOff">Mic off</span>
+        </div>
+        <div class="duck-cal">
+          <button class="chip-btn" id="duckCalibrate" type="button">Calibrate</button>
+          <span class="duck-hint">Click, then talk normally for 4 seconds.</span>
+        </div>
+        <div class="duck-grid">
+          <div class="field">
+            <label>Music while talking <output id="duckToOut">35%</output></label>
+            <input type="range" class="range" id="duckTo" min="5" max="90" step="5" value="35" aria-label="Music volume while talking" />
+          </div>
+          <div class="field">
+            <label>Sensitivity trigger <output id="duckThresholdOut">45%</output></label>
+            <input type="range" class="range" id="duckThreshold" min="1" max="95" step="1" value="45" aria-label="Sensitivity trigger" />
+          </div>
+          <div class="field">
+            <label>Microphone</label>
+            <select id="duckDevice" class="text-input"></select>
+          </div>
+        </div>
+        <p class="duck-note">For advanced ducking (curves, sidechain), use OBS's compressor filter.</p>
       </div>
 
       <div class="upnext" id="upnext">
