@@ -20,7 +20,7 @@ A compact, neon-cyberpunk desktop music player for **local MP3 / WAV files**, wi
 
 ![NeonAmp player window](docs/screenshot-player.png)
 
-*The player: album-grouped playlist on the left, Now Playing and the editable Up Next queue on the right, and the OBS Browser Source URL at the bottom.*
+*The player: album-grouped playlist on the left, Now Playing with the voice ducking panel open, the editable Up Next queue, and the OBS Browser Source URL at the bottom.*
 
 ![Overlay settings with live preview](docs/screenshot-overlay-settings.png)
 
