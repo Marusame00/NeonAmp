@@ -256,6 +256,16 @@ async function runSelfTest() {
     const afterDate = await js('document.querySelector("#tracklist .track .t-title").textContent');
     check('per-album sort switches to date created', afterDate === 'Untagged Track', { first: afterDate });
 
+    await js('document.querySelector("#tracklist .group-chevron").click()');
+    await wait(300);
+    const collapsedInfo = await js(`JSON.stringify({
+      rows: document.querySelectorAll('#tracklist .track').length,
+      foot: (document.querySelector('#tracklist .panel-foot') || {}).textContent || null
+    })`).then(JSON.parse);
+    check('collapsed album shows no filter footer', collapsedInfo.rows === 0 && collapsedInfo.foot === null, collapsedInfo);
+    await js('document.querySelector("#tracklist .group-chevron").click()');
+    await wait(300);
+
     const meta = await js(`JSON.stringify({
       title: document.getElementById('npTitle').textContent,
       artist: document.getElementById('npArtist').textContent,

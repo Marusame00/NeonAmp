@@ -199,7 +199,7 @@ overlay card staying dark (a regression guard for the glow scale), overlay text,
 pause freezing position, seek, next-track, stop, state persistence, the
 editable queue (add, reorder, play-next, clear), and voice ducking (toggle, mic
 level, ducking while speaking, the fade envelope, restore on off, persistence).
-It runs 28 checks, exits non-zero on failure and writes screenshots to `smoke/`.
+It runs 29 checks, exits non-zero on failure and writes screenshots to `smoke/`.
 
 Generate the test media once with ffmpeg (any 12 s MP3 with cover art plus an
 untagged WAV named `01-neon-skyline.mp3` / `Untagged Track.wav` in `smoke/media`).

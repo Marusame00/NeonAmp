@@ -430,10 +430,10 @@
     let matched = 0;
 
     for (const section of sections) {
-      matched += section.rows.length;
       if (!section.rows.length) continue;
       if (section.group) frag.appendChild(buildGroupHeader(section));
       if (section.group && section.group.collapsed) continue;
+      matched += section.rows.length;
       for (const row of section.rows) {
         if (shown >= 1000) break;
         frag.appendChild(buildTrackRow(row.track, row.index, section.sort));
