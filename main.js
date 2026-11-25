@@ -2,6 +2,8 @@
 
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell, clipboard, powerSaveBlocker } = require('electron');
 const path = require('node:path');
+const os = require('node:os');
+const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 
 const { startServer } = require('./src/server');
@@ -17,9 +19,13 @@ const AUDIO_EXTENSIONS = [...metadata.AUDIO_EXTENSIONS].map((ext) => ext.slice(1
 const SMOKE = process.argv.includes('--smoke');
 const SELFTEST = process.argv.includes('--selftest');
 
+// Inside a packaged build __dirname is the read-only app.asar, so test output
+// has to go somewhere writable. Development runs keep using smoke/.
+const SMOKE_DIR = app.isPackaged ? path.join(os.tmpdir(), 'neonamp-selftest') : path.join(__dirname, 'smoke');
+
 if (SELFTEST) {
   // Keep automated runs away from the real user profile.
-  app.setPath('userData', path.join(__dirname, 'smoke', 'userdata'));
+  app.setPath('userData', path.join(SMOKE_DIR, 'userdata'));
   app.commandLine.appendSwitch('use-fake-device-for-media-stream');
   app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 }
@@ -91,6 +97,10 @@ async function mapLimit(items, limit, fn) {
 
 function createWindow() {
   const isWindows = process.platform === 'win32';
+  const windowIcon = () => {
+    const file = path.join(__dirname, 'build', 'icon.png');
+    return fs.existsSync(file) ? file : undefined;
+  };
   const isMac = process.platform === 'darwin';
 
   mainWindow = new BrowserWindow({
@@ -101,6 +111,7 @@ function createWindow() {
     show: false,
     backgroundColor: '#05050b',
     title: 'NeonAmp',
+    ...(windowIcon() ? { icon: windowIcon() } : {}),
     titleBarStyle: isMac ? 'hiddenInset' : isWindows ? 'hidden' : 'default',
     titleBarOverlay: isWindows ? { color: '#08080f', symbolColor: '#8ff6ff', height: 46 } : undefined,
     trafficLightPosition: isMac ? { x: 16, y: 15 } : undefined,
@@ -222,7 +233,7 @@ function registerIpc() {
 }
 
 async function runSelfTest() {
-  const outDir = path.join(__dirname, 'smoke');
+  const outDir = SMOKE_DIR;
   await fsp.mkdir(outDir, { recursive: true });
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const js = (code) => mainWindow.webContents.executeJavaScript(code, true);
@@ -480,7 +491,7 @@ async function runSelfTest() {
 }
 
 async function runSmokeTest() {
-  const outDir = path.join(__dirname, 'smoke');
+  const outDir = SMOKE_DIR;
   await fsp.mkdir(outDir, { recursive: true });
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   try {

@@ -35,8 +35,8 @@ Requirements: **Node.js 20+** (or 22+), npm.
 **Prebuilt Windows binaries** are attached to the
 [latest release](https://github.com/Marusame00/NeonAmp/releases/latest):
 
-- `NeonAmp-1.2.1-Setup.exe` — installer, adds a Start Menu entry and desktop shortcut
-- `NeonAmp-1.2.1-Portable.exe` — single file, no installation
+- `NeonAmp-1.3.0-Setup.exe` — installer, adds a Start Menu entry and desktop shortcut
+- `NeonAmp-1.3.0-Portable.exe` — single file, no installation
 
 Neither is code-signed, so Windows SmartScreen will warn on first run
 (**More info → Run anyway**).
@@ -234,6 +234,8 @@ src/server.js           localhost HTTP: SSE stream, /api/state, /audio (Range), 
 src/renderer/           desktop UI (index.html, styles.css, app.js)
 src/overlay/            the OBS page (overlay.html, overlay.css, overlay.js, fallback.svg)
 docs/                   README screenshots
+build/                  app icon (icon.ico, icon.png) and how to regenerate it
+scripts/make-icon.py    Pillow icon generator (multi-size .ico + 512 px .png)
 ```
 
 - **Transport**: the renderer owns an `HTMLAudioElement`; audio is streamed from the
